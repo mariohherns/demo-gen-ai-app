@@ -1,0 +1,9 @@
+Flask>=3.0.0                   # Lightweight Python web framework
+Flask-Cors>=4.0.0              # Enables CORS for frontend-backend communication
+gunicorn>=21.2.0               # WSGI server for production deployment
+openai>=1.2.0                  # OpenAI API integration (DALL·E)
+pillow>=10.1.0                 # Image processing library
+requests>=2.31.0               # Making API calls
+pymongo>=4.5.0                 # MongoDB integration for storing user feedback
+psycopg2-binary>=2.9.9         # PostgreSQL database connection
+python-dotenv>=1.0.1           # Manage environment variables from .env file
