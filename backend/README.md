@@ -1,6 +1,6 @@
-## project structure
+## Project Structure
 
-``
+```plaintext
 /ai-design-app
 │── /backend                # Backend (Flask API, AI processing)
 │   ├── /models             # AI models & scripts
@@ -34,4 +34,4 @@
 │
 │── README.md               # Project documentation
 │── .gitignore              # Ignore unnecessary files
-``
+```
