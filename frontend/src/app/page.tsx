@@ -1,76 +1,95 @@
-"use client"
+"use client";
+
 import { useState } from "react";
-import { generateDesign, analyzeImage } from "../../services/api";
+import axios from "axios";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function Home() {
-  const [textPrompt, setTextPrompt] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  // This state allows for the description to be display for the image
-  // const [description, setDescription] = useState("");
-  const [analysis, setAnalysis] = useState("");
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState("");
+  const [result, setResult] : any = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleGenerate = async () => {
-    const response = await generateDesign(textPrompt);
-    setImageUrl(response.image_url);
-    // setDescription(response.description);
+  const handleImageChange = (e : any) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImage(file);
+      setPreview(URL.createObjectURL(file));
+      setResult(null); // Clear result if a new file is selected
+    }
   };
 
   const handleAnalyze = async () => {
-    const response = await analyzeImage(imageUrl);
-    setAnalysis(response.analysis);
+    if (!image) return;
+    const formData = new FormData();
+    formData.append("image", image);
+
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_URL}/full-analyze`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setResult(response.data);
+      console.log(response.data);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Failed to analyze image.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-return (
+  return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-2xl font-bold text-center mb-4 text-gray-800">
-          AI Architectural Design Assistant
+        <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
+          Chest X-ray Analyzer
         </h1>
-        <div className="mb-4">
-          <input
-            type="text"
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Describe your design..."
-            onChange={(e) => setTextPrompt(e.target.value)}
-          />
-        </div>
-        <div className="mb-4">
-          <button
-            onClick={handleGenerate}
-            className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors"
-          >
-            Generate Design
-          </button>
-        </div>
 
-        {imageUrl && (
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">
-              Generated Image
-            </h3>
-            <img
-              src={imageUrl}
-              alt="AI-Generated Design"
-              className="w-full h-auto rounded mb-2"
-            />
-            {/* <p className="text-gray-600 mb-2">
-              <strong>Description:</strong> {description}
-            </p> */}
-            <button
-              onClick={handleAnalyze}
-              className="w-full bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 transition-colors"
-            >
-              Analyze Image
-            </button>
-          </div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          className="mb-4 w-full text-gray-700"
+        />
+
+        {preview && (
+          <img
+            src={preview}
+            alt="Preview"
+            className="rounded w-full h-auto mb-4 border"
+          />
         )}
 
-        {analysis && (
-          <p className="text-gray-600 mt-4">
-            <strong>Analysis:</strong> {analysis}
-          </p>
+        <button
+          onClick={handleAnalyze}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors mb-4"
+          disabled={loading}
+        >
+          {loading ? "Analyzing..." : "Analyze X-ray"}
+        </button>
+
+        {result && (
+          <div className="text-gray-700 space-y-2">
+            <p>
+              <strong>Prediction:</strong>{" "}
+              <span className="capitalize">{result.prediction}</span>
+            </p>
+            <p>
+              <strong>Confidence:</strong>{" "}
+              {(result.confidence * 100).toFixed(2)}%
+            </p>
+            <p>
+              <strong>Explanation:</strong> {result.explanation}
+            </p>
+          </div>
         )}
       </div>
     </div>
   );
 }
+
+
+
+  
