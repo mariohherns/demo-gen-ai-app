@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
-from torchvision.models import resnet18
+from torchvision.models import resnet18, ResNet18_Weights
 from medmnist import ChestMNIST
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, f1_score
@@ -12,7 +12,7 @@ import numpy as np
 
 # ==== Hyperparameters ====
 BATCH_SIZE = 32
-EPOCHS = 10
+EPOCHS = 6
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 MODEL_PATH = "backend/models/fracture_detector.pth"
 
@@ -37,28 +37,19 @@ test_transform = transforms.Compose([
 train_dataset = ChestMNIST(split="train", download=True, size=224, transform=train_transform)
 test_dataset = ChestMNIST(split="test", download=True, size=224, transform=test_transform)
 
-# ==== Convert to Binary (abnormal vs normal) ====
-class BinaryChestDataset(Dataset):
-    def __init__(self, dataset):
-        self.dataset = dataset
-
-    def __getitem__(self, index):
-        image, label = self.dataset[index]
-        label_tensor = torch.from_numpy(label)
-        binary_label = torch.tensor([1.0]) if torch.sum(label_tensor) > 0 else torch.tensor([0.0])
-        return image, binary_label
-
-    def __len__(self):
-        return len(self.dataset)
+# ==== Compute pos_weight for BCEWithLogitsLoss ====
+label_counts = np.sum(train_dataset.labels, axis=0)
+pos_weights = (len(train_dataset) - label_counts) / (label_counts + 1e-5)
+pos_weights = torch.tensor(pos_weights, dtype=torch.float32).to(DEVICE)
 
 # ==== Data Loaders ====
-train_loader = DataLoader(BinaryChestDataset(train_dataset), batch_size=BATCH_SIZE, shuffle=True)
-test_loader = DataLoader(BinaryChestDataset(test_dataset), batch_size=BATCH_SIZE, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # ==== Model Setup ====
-model = resnet18(weights=None)
+model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
 model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-model.fc = nn.Linear(model.fc.in_features, 1)
+model.fc = nn.Linear(model.fc.in_features, 14)  # 14 diseases (multi-label)
 
 # Load existing weights if available
 if os.path.exists(MODEL_PATH):
@@ -70,9 +61,9 @@ else:
 model.to(DEVICE)
 
 # ==== Loss, Optimizer, Scheduler ====
-criterion = nn.BCEWithLogitsLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
+criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weights)
+optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
 # ==== Training Loop ====
 best_loss = float('inf')
@@ -81,8 +72,6 @@ os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 for epoch in range(EPOCHS):
     model.train()
     running_loss = 0.0
-    correct = 0
-    total = 0
     all_preds = []
     all_labels = []
 
@@ -99,23 +88,27 @@ for epoch in range(EPOCHS):
 
         running_loss += loss.item()
         probs = torch.sigmoid(outputs)
-        preds = (probs > 0.5).float()
-        correct += (preds == labels).sum().item()
-        total += labels.size(0)
 
         all_preds.extend(probs.detach().cpu().numpy())
         all_labels.extend(labels.detach().cpu().numpy())
 
-        loop.set_postfix(loss=loss.item(), acc=(correct / total))
+        loop.set_postfix(loss=loss.item())
 
     avg_loss = running_loss / len(train_loader)
-    avg_acc = correct / total
     scheduler.step()
 
-    auc = roc_auc_score(all_labels, all_preds)
-    f1 = f1_score(all_labels, (np.array(all_preds) > 0.5).astype(float))
+    all_preds_np = np.array(all_preds)
+    all_labels_np = np.array(all_labels)
+    auc = roc_auc_score(all_labels_np, all_preds_np, average="macro")
+    f1 = f1_score(all_labels_np, (all_preds_np > 0.5).astype(float), average="macro")
 
-    print(f"\n Epoch {epoch+1}: Avg Loss = {avg_loss:.4f}, Avg Acc = {avg_acc:.4f}, AUC = {auc:.4f}, F1 = {f1:.4f}")
+    print(f"\nEpoch {epoch+1}: Avg Loss = {avg_loss:.4f}, AUC = {auc:.4f}, F1 = {f1:.4f}")
+
+    # Print per-label AUC and F1
+    for i, label in enumerate(train_dataset.info["label"].values()):
+        class_auc = roc_auc_score(all_labels_np[:, i], all_preds_np[:, i])
+        class_f1 = f1_score(all_labels_np[:, i], (all_preds_np[:, i] > 0.5).astype(float))
+        print(f"🔍 {label:20s} | AUC: {class_auc:.3f} | F1: {class_f1:.3f}")
 
     # Save best model
     if avg_loss < best_loss:

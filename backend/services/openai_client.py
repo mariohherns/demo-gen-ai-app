@@ -42,16 +42,30 @@ class OpenAIService:
             return None
 
     #  Explain Prediction
-    def explain_prediction(self, label):
+    def explain_prediction(self, predictions: dict):
+        """
+        Accepts a dictionary of predicted conditions and confidence scores,
+        returns an explanation string for all detected conditions.
+        """
         try:
+            if not predictions:
+                return "No abnormal findings detected in the X-ray."
+
+            conditions = list(predictions.keys())
+            joined = ", ".join(conditions)
+            message = (
+                f"The following conditions were detected in the chest X-ray: {joined}.\n"
+                "Please provide a brief medical explanation for each one."
+            )
+
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "user", "content": f"What does a {label} finding in a chest X-ray generally indicate?"}
+                    {"role": "user", "content": message}
                 ]
             )
             return response.choices[0].message.content
+
         except Exception as e:
             print("Error in explanation generation:", e)
             return "Explanation could not be generated."
-

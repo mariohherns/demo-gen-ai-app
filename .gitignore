@@ -1,1 +1,4 @@
 backend/models/fracture_detector.pth
+backend/train/train_mod_1.py
+backend/train/training_model_2.py
+backend/train/test.py

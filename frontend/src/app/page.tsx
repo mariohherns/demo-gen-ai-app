@@ -6,22 +6,23 @@ import axios from "axios";
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function Home() {
-  const [image, setImage] = useState(null);
-  const [preview, setPreview] = useState("");
-  const [result, setResult] : any = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [image, setImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string>("");
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const handleImageChange = (e : any) => {
-    const file = e.target.files[0];
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       setImage(file);
       setPreview(URL.createObjectURL(file));
-      setResult(null); // Clear result if a new file is selected
+      setResult(null); // Clear result
     }
   };
 
   const handleAnalyze = async () => {
     if (!image) return;
+
     const formData = new FormData();
     formData.append("image", image);
 
@@ -72,15 +73,15 @@ export default function Home() {
 
         {result && (
           <div className="text-gray-700 space-y-2">
-            <p>
-              <strong>Prediction:</strong>{" "}
-              <span className="capitalize">{result.prediction}</span>
-            </p>
-            <p>
-              <strong>Confidence:</strong>{" "}
-              {(result.confidence * 100).toFixed(2)}%
-            </p>
-            <p>
+            <h2 className="text-lg font-semibold">Predictions:</h2>
+            <ul className="list-disc pl-6">
+              {Object.entries(result.predictions).map(([label, confidence]: any) => (
+                <li key={label}>
+                  <strong className="capitalize">{label}</strong>: {(confidence * 100).toFixed(2)}%
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4">
               <strong>Explanation:</strong> {result.explanation}
             </p>
           </div>

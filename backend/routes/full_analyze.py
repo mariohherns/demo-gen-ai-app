@@ -9,7 +9,6 @@ def register_analyze_routes(app, fracture_model, openai_service):
     @analyze_bp.route("/full-analyze", methods=["POST"])
     def full_analyze():
         try:
-            # Check if image part exists in the request
             if "image" not in request.files:
                 raise ValueError("No 'image' field in request.files")
 
@@ -22,21 +21,19 @@ def register_analyze_routes(app, fracture_model, openai_service):
             except UnidentifiedImageError:
                 raise ValueError("Uploaded file is not a valid image")
 
-            # Run inference
-            label, confidence = fracture_model.predict(image)
+            # Run inference: get dict of condition → probability
+            predictions = fracture_model.predict(image)
 
-            # Explanation from GPT (optional)
-            explanation = openai_service.explain_prediction(label)
+            # Explanation from GPT
+            explanation = openai_service.explain_prediction(predictions)
 
             return jsonify({
-                "prediction": label,
-                "confidence": round(confidence, 3),
+                "predictions": predictions,
                 "explanation": explanation
             })
 
         except Exception as e:
-            print("Error in /full-analyze:", str(e))  # Debug log
+            print("Error in /full-analyze:", str(e))
             return jsonify({"error": str(e)}), 500
 
     app.register_blueprint(analyze_bp)
-    
